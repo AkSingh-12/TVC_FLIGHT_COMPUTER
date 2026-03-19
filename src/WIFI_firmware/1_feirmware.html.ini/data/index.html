@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>🚀 Rocket Live Telemetry</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Leaflet CSS/JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    body{margin:0;background:#0b0b0b;color:#e0ffe0;font-family:system-ui,Arial,sans-serif}
+    header{padding:12px 16px;border-bottom:1px solid #114;display:flex;gap:16px;align-items:center}
+    .pill{background:#072;border:1px solid #0a4;padding:4px 10px;border-radius:999px;font-weight:600}
+    .wrap{display:grid;grid-template-columns: 380px 1fr; gap:12px; padding:12px}
+    .card{background:#060;border:1px solid #0a0;padding:12px;border-radius:14px;box-shadow:0 0 18px rgba(0,255,0,0.08)}
+    .row{display:flex;justify-content:space-between;margin:6px 0}
+    map{height: calc(100vh - 120px); border-radius:12px}
+    select,button{background:#020;color:#0f0;border:1px solid #0a0;border-radius:8px;padding:6px 10px}
+    .big{font-size:1.4rem;font-weight:700}
+    .mono{font-family:ui-monospace,Menlo,monospace}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="pill">Rocket Telemetry</div>
+    <div id="modeView" class="pill">Mode: …</div>
+    <div class="pill">Link: <span id="status">connecting…</span></div>
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+      <label for="modeSel">Set mode:</label>
+      <select id="modeSel">
+        <option value="0">SAFE</option>
+        <option value="1">STABILIZE</option>
+        <option value="2">ASCENT</option>
+        <option value="3">DESCENT</option>
+        <option value="4">LAND</option>
+        <option value="5">SIM</option>
+      </select>
+      <button id="applyBtn">Apply</button>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="card">
+      <div class="row"><div>Roll</div><div class="big mono" id="roll">—</div></div>
+      <div class="row"><div>Pitch</div><div class="big mono" id="pitch">—</div></div>
+      <div class="row"><div>Yaw</div><div class="big mono" id="yaw">—</div></div>
+      <div class="row"><div>Altitude (m)</div><div class="big mono" id="alt">—</div></div>
+      <div class="row"><div>Servo</div><div class="big mono" id="servo">—</div></div>
+      <div class="row"><div>Time (ms)</div><div class="mono" id="time">—</div></div>
+      <div class="row"><div>Lat</div><div class="mono" id="lat">—</div></div>
+      <div class="row"><div>Lng</div><div class="mono" id="lng">—</div></div>
+    </div>
+    <div id="map" class="card"></div>
+  </div>
+
+  <script>
+    // Map init
+    const map = L.map('map').setView([0,0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      attribution:'© OpenStreetMap'
+    }).addTo(map);
+    const marker = L.marker([0,0]).addTo(map);
+
+    let firstFix = false;
+    const $ = id => document.getElementById(id);
+
+    async function poll() {
+      try {
+        const r = await fetch('/telemetry', {cache:'no-store'});
+        if (!r.ok) throw new Error(r.status);
+        const d = await r.json();
+
+        $('status').textContent = 'live';
+        $('modeView').textContent = 'Mode: ' + (d.mode || '—');
+
+        $('roll').textContent  = (d.roll ?? 0).toFixed(2);
+        $('pitch').textContent = (d.pitch ?? 0).toFixed(2);
+        $('yaw').textContent   = (d.yaw ?? 0).toFixed(2);
+        $('alt').textContent   = (d.alt ?? 0).toFixed(2);
+        $('servo').textContent = d.servo ?? 0;
+        $('time').textContent  = d.t ?? 0;
+
+        $('lat').textContent = (d.lat ?? 0).toFixed(6);
+        $('lng').textContent = (d.lng ?? 0).toFixed(6);
+
+        const lat = Number(d.lat), lng = Number(d.lng);
+        if (lat && lng) {
+          marker.setLatLng([lat,lng]);
+          if (!firstFix) { map.setView([lat,lng], 14); firstFix = true; }
+        }
+      } catch (e) {
+        $('status').textContent = 'waiting…';
+      }
+    }
+    setInterval(poll, 200);
+
+    $('applyBtn').onclick = async () => {
+      const m = $('modeSel').value;
+      await fetch('/mode?m='+m, {method:'POST'});
+      setTimeout(poll, 150);
+    };
+  </script>
+</body>
+</html>
